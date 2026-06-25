@@ -20,9 +20,31 @@ const FIXES = [
     selector: 'div.ytp-chapter-title-content[aria-live="polite"]',
     apply: (el) => el.setAttribute("aria-live", "off"),
   },
+  {
+    // The play/pause button has an unwanted aria-keyshortcuts and a verbose
+    // aria-label ("Press k to activate the Play button"). Drop the shortcut and
+    // replace the label with the concise tooltip title. data-tooltip-title
+    // changes as the play state toggles, so re-sync the label on each change
+    // (guarded to avoid feeding our own mutation back into the observer).
+    selector: "button.ytp-play-button",
+    apply: (el) => {
+      if (el.hasAttribute("aria-keyshortcuts")) {
+        el.removeAttribute("aria-keyshortcuts");
+      }
+      const tooltip = el.getAttribute("data-tooltip-title");
+      if (tooltip && el.getAttribute("aria-label") !== tooltip) {
+        el.setAttribute("aria-label", tooltip);
+      }
+    },
+  },
 ];
 
-const ATTRIBUTE_FILTER = ["aria-label", "aria-live"];
+const ATTRIBUTE_FILTER = [
+  "aria-label",
+  "aria-live",
+  "aria-keyshortcuts",
+  "data-tooltip-title",
+];
 
 function fixElement(el) {
   for (const fix of FIXES) {
