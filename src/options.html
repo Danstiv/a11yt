@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A11YT settings</title>
+    <style>
+      /* The same page serves as both the toolbar popup (content-sized, capped
+         at roughly 800x600) and a full-width options tab. */
+      body {
+        min-width: 360px;
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: 1rem;
+        font-family: system-ui, sans-serif;
+        line-height: 1.4;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+      }
+
+      fieldset {
+        border: 1px solid;
+        padding: 0.5rem 1rem 1rem;
+      }
+
+      .feature + .feature {
+        margin-top: 1rem;
+      }
+
+      .feature-description {
+        margin: 0.25rem 0 0 1.75rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>A11YT settings</h1>
+    <p>Changes take effect after you reload open YouTube tabs.</p>
+    <div id="status" role="status"></div>
+    <fieldset>
+      <legend>Features</legend>
+      <div id="features"></div>
+    </fieldset>
+    <script src="features.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

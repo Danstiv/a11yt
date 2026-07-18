@@ -1,13 +1,22 @@
 {
   "manifest_version": 3,
   "name": "A11YT",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Improves YouTube accessibility for screen reader users.",
+  "permissions": ["storage"],
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["content.js"],
+      "js": ["features.js", "content.js"],
       "run_at": "document_start"
     }
-  ]
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_popup": "options.html",
+    "default_title": "A11YT settings"
+  }
 }

@@ -1,89 +1,72 @@
 "use strict";
 
-// Each fix has a selector matching the elements to patch and an apply()
-// callback that performs the change. Selectors include the "bad" attribute
-// value so already-fixed elements stop matching and aren't touched again.
-const FIXES = [
-  {
-    // Feed video headings carry a redundant aria-label that duplicates the text
-    // of the link inside them. Because of it, a screen reader announces the h3
-    // as a single text node and doesn't expose the nested <a>, so the link
-    // can't be focused (e.g. opened in a new tab via Ctrl+Shift+Enter). Remove
-    // the aria-label from the h3 while keeping it on the link itself.
-    selector: "h3.ytLockupMetadataViewModelHeadingReset[aria-label]",
-    apply: (el) => el.removeAttribute("aria-label"),
-  },
-  {
-    // The player's chapter title is an aria-live region, so every time the
-    // chapter changes the screen reader interrupts playback to announce the new
-    // title. Turn the live region off so it stays silent.
-    selector: 'div.ytp-chapter-title-content[aria-live="polite"]',
-    apply: (el) => el.setAttribute("aria-live", "off"),
-  },
-  {
-    // The play/pause button has an unwanted aria-keyshortcuts and a verbose
-    // aria-label ("Press k to activate the Play button"). Drop the shortcut and
-    // replace the label with the concise tooltip title. data-tooltip-title
-    // changes as the play state toggles, so re-sync the label on each change
-    // (guarded to avoid feeding our own mutation back into the observer).
-    selector: "button.ytp-play-button",
-    apply: (el) => {
-      if (el.hasAttribute("aria-keyshortcuts")) {
-        el.removeAttribute("aria-keyshortcuts");
-      }
-      const tooltip = el.getAttribute("data-tooltip-title");
-      if (tooltip && el.getAttribute("aria-label") !== tooltip) {
-        el.setAttribute("aria-label", tooltip);
-      }
-    },
-  },
-];
+// The features themselves live in features.js, which the manifest loads before
+// this file (scripts of one content_scripts entry run in order and share the
+// same isolated-world scope, so FEATURES is visible here).
 
-const ATTRIBUTE_FILTER = [
-  "aria-label",
-  "aria-live",
-  "aria-keyshortcuts",
-  "data-tooltip-title",
-];
-
-function fixElement(el) {
-  for (const fix of FIXES) {
-    if (el.matches(fix.selector)) {
-      fix.apply(el);
+function fixElement(el, features) {
+  for (const feature of features) {
+    if (el.matches(feature.selector)) {
+      feature.apply(el);
     }
   }
 }
 
-function fixTree(root) {
+function fixTree(root, features) {
   if (root.nodeType !== Node.ELEMENT_NODE) {
     return;
   }
-  fixElement(root);
-  for (const fix of FIXES) {
-    root.querySelectorAll(fix.selector).forEach(fix.apply);
+  fixElement(root, features);
+  for (const feature of features) {
+    root.querySelectorAll(feature.selector).forEach((el) => feature.apply(el));
   }
 }
 
-// Handle elements already present on the page.
-fixTree(document.documentElement);
-
-// YouTube is an SPA and content loads dynamically, so watch for newly added
-// nodes and for the watched attributes appearing on existing ones.
-const observer = new MutationObserver((mutations) => {
-  for (const mutation of mutations) {
-    if (mutation.type === "attributes") {
-      if (mutation.target.matches) {
-        fixElement(mutation.target);
-      }
-      continue;
-    }
-    mutation.addedNodes.forEach(fixTree);
+// Settings are read once at startup; changes only take effect once the page is
+// reloaded. Awaiting storage costs a few milliseconds of the document_start
+// head start, which is harmless: the only timing-sensitive feature is the
+// chapter title live region, and the player doesn't exist that early anyway.
+(async () => {
+  const defaults = featureDefaults();
+  let settings;
+  try {
+    settings = await chrome.storage.sync.get(defaults);
+  } catch {
+    // Reading can fail when the extension is reloaded or updated while a
+    // YouTube tab is open ("Extension context invalidated"). Fall back to the
+    // defaults so we degrade gracefully instead of applying nothing at all.
+    settings = defaults;
   }
-});
 
-observer.observe(document.documentElement, {
-  childList: true,
-  subtree: true,
-  attributes: true,
-  attributeFilter: ATTRIBUTE_FILTER,
-});
+  const enabled = FEATURES.filter((feature) => settings[feature.id]);
+  if (enabled.length === 0) {
+    return;
+  }
+
+  // Handle elements already present on the page, including anything added while
+  // the settings were being read.
+  fixTree(document.documentElement, enabled);
+
+  // YouTube is an SPA and content loads dynamically, so watch for newly added
+  // nodes and for the watched attributes appearing on existing ones.
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === "attributes") {
+        if (mutation.target.matches) {
+          fixElement(mutation.target, enabled);
+        }
+        continue;
+      }
+      mutation.addedNodes.forEach((node) => fixTree(node, enabled));
+    }
+  });
+
+  // Observing starts in the same synchronous run as the full pass above, so no
+  // mutation can slip through in between.
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: [...new Set(enabled.flatMap((f) => f.attributes))],
+  });
+})();
